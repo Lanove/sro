@@ -1,0 +1,12 @@
+\babel@toc {nil}{}\relax 
+\contentsline {section}{\numberline {1}Gambaran Umum Sistem}{1}{section.1}%
+\contentsline {section}{\numberline {2}Fungsi Keanggotaan (Fuzzification)}{1}{section.2}%
+\contentsline {section}{\numberline {3}Rule Base dalam Tabel}{2}{section.3}%
+\contentsline {subsection}{\numberline {3.1}Aturan Motor Kiri}{2}{subsection.3.1}%
+\contentsline {subsection}{\numberline {3.2}Aturan Motor Kanan}{2}{subsection.3.2}%
+\contentsline {section}{\numberline {4}Defuzzifikasi dan Plot Output Crisp}{3}{section.4}%
+\contentsline {section}{\numberline {5}Konfigurasi Sensor dan Pembebanan}{3}{section.5}%
+\contentsline {section}{\numberline {6}Visualisasi}{4}{section.6}%
+\contentsline {section}{\numberline {7}Implementasi Kode Lengkap}{4}{section.7}%
+\contentsline {section}{\numberline {8}Kesimpulan}{5}{section.8}%
+\contentsline {section}{\numberline {A}Kode Sumber Lengkap}{5}{appendix.A}%

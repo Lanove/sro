@@ -1,0 +1,220 @@
+\documentclass[a4paper,11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{float}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{babel}
+
+% Kustom warna untuk syntax highlighting
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.96,0.96,0.96}
+
+% Konfigurasi Python listings
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{blue},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2
+}
+
+\lstset{style=mystyle}
+
+\title{Sistem Fuzzy Obstacle Avoidance PioneerP3DX}
+\newcommand{\youtubelink}{\href{https://youtu.be/wl1X7vWXRO4}{Video Demo}}
+\author{Figo Arzaki Maulana}
+\date{28 April 2025}
+
+\begin{document}
+
+\maketitle
+
+\section{Deskripsi Sistem}
+\youtubelink
+
+Sistem ini menggunakan 6 sensor ultrasonik pada robot PioneerP3DX untuk program obstacle avoidance. Data jarak dari setiap sensor difuzzifikasi menjadi dua fuzzy membership: Near dan Far. Hasil fuzzy inference menghasilkan sinyal PWM untuk motor kiri dan kanan. Pada sistem ini digunakan 2 input dan 1 output untuk setiap roda kanan dan kiri. Sistem menggunakan singleton PWM output dengan nilai -5 dan 5 namun pada velocity dilakukan normalisasi kecepatan menjadi -1 hingga 1. Hal ini dilakukan melalui tuning dan memberikan hasil yang lebih bagus daripada menggunakan singleton PWM dengan nilai -1 dan 1.
+
+\section{Membership Function}
+Proses fuzzifikasi menggunakan fungsi segitiga. Implementasi fungsi keanggotaan untuk "Near" dan "Far" terhadap jarak sensor adalah sebagai berikut:
+
+\begin{lstlisting}[language=Python, caption=Implementasi Fungsi Keanggotaan Segitiga]
+def triangle_membership(x, a, b, c, FD0, FD2):
+    if x < a:
+        FD = FD0
+    elif x >= a and x < b:
+        FD = (x - a) / (b - a)
+    elif x >= b and x < c:
+        FD = (c - x) / (c - b)
+    elif x >= c:
+        FD = FD2
+    return FD
+
+def ultrasound_membership(x):
+    near = triangle_membership(x, 0.2, 0.2, 0.3, 1, 0)
+    far = triangle_membership(x, 0.2, 0.3, 0.3, 0, 1)
+    y = np.array([[near], [far]], dtype=float)
+    return y
+\end{lstlisting}
+
+Fungsi keanggotaan menggunakan parameter-parameter berikut:
+\begin{itemize}
+    \item \textbf{Near}: Segitiga dengan a=0.2, b=0.2, c=0.3, FD0=1, FD2=0
+    \item \textbf{Far}: Segitiga dengan a=0.2, b=0.3, c=0.3, FD0=0, FD2=1
+\end{itemize}
+
+\section{Rule Base dalam Tabel}
+Basis aturan fuzzy mendefinisikan bagaimana sistem merespons input dari sensor. Terdapat tabel aturan terpisah untuk motor kiri dan kanan:
+
+\subsection{Aturan Motor Kiri}
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|}
+\hline
+\multicolumn{1}{|c|}{} & \multicolumn{2}{c|}{Sensor Kiri} \\
+\cline{2-3}
+\multicolumn{1}{|c|}{Sensor Kanan} & Near & Far \\
+\hline
+Near & IF Near/Near → -5 & IF Far/Near → -5 \\
+\hline
+Far & IF Near/Far → +5 & IF Far/Far → +5 \\
+\hline
+\end{tabular}
+\caption{Tabel Aturan Fuzzy untuk Motor Kiri}
+\end{table}
+
+\subsection{Aturan Motor Kanan}
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|}
+\hline
+\multicolumn{1}{|c|}{} & \multicolumn{2}{c|}{Sensor Kiri} \\
+\cline{2-3}
+\multicolumn{1}{|c|}{Sensor Kanan} & Near & Far \\
+\hline
+Near & IF Near/Near → -5 & IF Far/Near → +5 \\
+\hline
+Far & IF Near/Far → -5 & IF Far/Far → +5 \\
+\hline
+\end{tabular}
+\caption{Tabel Aturan Fuzzy untuk Motor Kanan}
+\end{table}
+
+Dalam kode, aturan-aturan ini diimplementasikan sebagai matriks:
+
+\begin{lstlisting}[language=Python, caption=Implementasi Tabel Aturan]
+rule_table_left = np.array([[0, 0], [1, 1]], dtype=int)
+rule_table_right = np.array([[0, 1], [0, 1]], dtype=int)
+singleton_PWM_outputs = np.array([[-5], [5]], dtype=float)
+\end{lstlisting}
+
+Di mana indeks 0 sesuai dengan nilai -5 dan indeks 1 sesuai dengan nilai +5 dalam nilai output singleton.
+
+\section{Defuzzifikasi dan Plot Output Crisp}
+Setelah inferensi, output didefuzzifikasi dengan metode weighted average. Implementasi melibatkan perhitungan output crisp berdasarkan evaluasi aturan:
+
+\begin{lstlisting}[language=Python, caption=Implementasi Defuzzifikasi]
+defuzz_table = []
+for idx in range(3):
+    left_idx = idx
+    right_idx = len(output_singleton) - idx - 1
+    
+    left_memberships = output_singleton[left_idx]
+    right_memberships = output_singleton[right_idx]
+    
+    num_left = 0
+    den_left = 0
+    num_right = 0
+    den_right = 0
+    
+    for r in range(2):  # near/far
+        for l in range(2):  # near/far
+            tab_idx_left = rule_table_left[r][l]
+            tab_idx_right = rule_table_right[r][l]
+            
+            fd1andfd2 = float(min(left_memberships[l], right_memberships[r]))
+            
+            num_left += fd1andfd2 * singleton_PWM_outputs[tab_idx_left]
+            den_left += fd1andfd2
+            num_right += fd1andfd2 * singleton_PWM_outputs[tab_idx_right]
+            den_right += fd1andfd2
+    
+    crisp_left = num_left / den_left if den_left > 0 else 0
+    crisp_right = num_right / den_right if den_right > 0 else 0
+    crisp_out.append([crisp_left, crisp_right])
+\end{lstlisting}
+
+\section{Konfigurasi Sensor dan Pembebanan}
+Robot menggunakan 6 sensor ultrasonik dengan indeks sensor [1,2,3,4,5,6]. Dari keenam sensor tersebut, data diambil secara berpasangan mulai dari sensor terluar hingga sensor terdalam:
+
+\begin{itemize}
+    \item Sensor pasang 1 (indeks 1 \& 6) dengan bobot 1.5
+    \item Sensor pasang 2 (indeks 2 \& 5) dengan bobot 2.5
+    \item Sensor pasang 3 (indeks 3 \& 4) dengan bobt 3.5
+\end{itemize}
+
+Bobot ini memengaruhi perhitungan weighted crisp sebelum normalisasi ke rentang [-1, 1]. Nilai tersebut ditentukan berdasarkan urgensi deteksi obstacle:
+\begin{itemize}
+    \item Sensor yang berada di samping ketika mendeteksi obstacle berarti akan membuat robot bersenggolan atau hanya terserempet sehingga urgensinya tidak terlalu besar.
+    \item Pasangan sensor yang ada di tengah memiliki urgensi yang sangat besar karena robot pasti akan bertabrakan jika lurus.
+\end{itemize}
+
+\begin{lstlisting}[language=Python, caption=Perhitungan Weighted Crisp Output]
+weights = [1.5, 2.5, 3.5]
+weighted_crisp = [0, 0]
+for i in range(len(crisp_out)):
+    weighted_crisp[0] += crisp_out[i][0] * weights[i]
+    weighted_crisp[1] += crisp_out[i][1] * weights[i]
+weighted_crisp[0] /= sum(weights)
+weighted_crisp[1] /= sum(weights)
+
+max_velocity = 4
+weighted_crisp[0] = max(-1, min(1, weighted_crisp[0] / max_velocity))
+weighted_crisp[1] = max(-1, min(1, weighted_crisp[1] / max_velocity))
+\end{lstlisting}
+
+\section{Visualisasi}
+Sistem ini menyertakan visualisasi real-time dari fungsi keanggotaan dan pembacaan sensor:
+
+\begin{lstlisting}[language=Python, caption=Pengaturan Visualisasi]
+plt.ion()
+fig, ax = plt.subplots(figsize=(10, 6))
+plt.title('Distance Membership Functions')
+plt.xlabel('Distance (m)')
+plt.ylabel('Membership Value')
+plt.grid(True)
+plt.xlim([0, 1])
+plt.ylim([0, 1.1])
+
+ax.plot(dis_eval, near_vals, 'b-', label='Near')
+ax.plot(dis_eval, far_vals, 'g-', label='Far')
+ax.fill_between(dis_eval, near_vals, alpha=0.2, color='blue')
+ax.fill_between(dis_eval, far_vals, alpha=0.2, color='green')
+plt.legend()
+\end{lstlisting}
+
+\appendix
+\section{Kode Lengkap}
+\lstinputlisting[language=Python, caption=Implementasi Lengkap Fuzzy Obstacle Avoidance]{fuzzy.py}
+
+\end{document}
