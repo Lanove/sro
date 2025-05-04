@@ -234,11 +234,11 @@ class TrackingFIS:
 class ObstacleAvoidanceFIS:    
     def __init__(self):
         self.sensor_being_checked = [1, 2, 3, 4, 5, 6]
-        self.weights = [3, 15,3]
+        self.weights = [0.5,1,1.5]
         self.rule_table_left = np.array([[0, 0], [1, 1]], dtype=int)
         self.rule_table_right = np.array([[0, 1], [0, 1]], dtype=int)
-        self.singleton_PWM_outputs = np.array([[-5], [5]], dtype=float)
-        self.max_velocity = 3
+        self.singleton_PWM_outputs = np.array([-5, 5], dtype=float)
+        self.max_velocity = 2
         self.vw_out = np.array([0,0])
         self.phi_normal = 5
         self.near_threshold = 0.5
@@ -288,9 +288,9 @@ class ObstacleAvoidanceFIS:
                     
                     fd1andfd2 = float(min(left_memberships[l], right_memberships[r]))
                     
-                    num_left += fd1andfd2 * self.singleton_PWM_outputs[tab_idx_left][0]
+                    num_left += fd1andfd2 * self.singleton_PWM_outputs[tab_idx_left]
                     den_left += fd1andfd2
-                    num_right += fd1andfd2 * self.singleton_PWM_outputs[tab_idx_right][0]
+                    num_right += fd1andfd2 * self.singleton_PWM_outputs[tab_idx_right]
                     den_right += fd1andfd2
             
             crisp_left = num_left / den_left if den_left > 0 else 0
@@ -307,18 +307,8 @@ class ObstacleAvoidanceFIS:
         weighted_crisp[0] = max(-1, min(1, weighted_crisp[0] / self.max_velocity))
         weighted_crisp[1] = max(-1, min(1, weighted_crisp[1] / self.max_velocity))
         
-        phi_dot_vector = np.array([weighted_crisp[0], weighted_crisp[1]])
-        
-        phi_max = np.max(phi_dot_vector)
-        phi_rn = phi_dot_vector[0]
-        phi_ln = phi_dot_vector[1]
-        
-        if phi_max > self.phi_normal:
-            phi_rn = self.phi_normal * phi_rn / phi_max
-            phi_ln = self.phi_normal * phi_ln / phi_max
-        
         # result of this fuzzy is in q space, convert to x_bcs space
-        phi_dot_vector = np.array([phi_rn, phi_ln])
+        phi_dot_vector = np.array([weighted_crisp[1], weighted_crisp[0]])
 
         self.vw_out = forwardKinematics(phi_dot_vector)
         return self.vw_out
@@ -372,5 +362,6 @@ while True:
         phi_ln = phi_normal * phi_ln / phi_max
 
     wheel_vel = [phi_rn, phi_ln]
+    # wheel_vel = [0, 0]
     
     setRobotMotion(motors_handle, wheel_vel)

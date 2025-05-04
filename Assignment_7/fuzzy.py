@@ -16,7 +16,7 @@ def triangle_membership(x, a, b, c, FD0, FD2):
 def ultrasound_membership(x):
     near = triangle_membership(x, 0.2, 0.2, 0.3, 1, 0)
     far = triangle_membership(x, 0.2, 0.3, 0.3, 0, 1)
-    y = np.array([near, far], dtype=float)
+    y = np.array([[near], [far]], dtype=float)
     return y
 
 def getSensorsHandle(sim):
@@ -188,7 +188,7 @@ while True:
     weighted_crisp[0] = max(-1, min(1, weighted_crisp[0] / max_velocity))
     weighted_crisp[1] = max(-1, min(1, weighted_crisp[1] / max_velocity))
     
-    wheels_velo = weighted_crisp[0], weighted_crisp[1]
+    wheels_velo = weighted_crisp[1], weighted_crisp[0]
     text_wheels.set_text(f'Wheels: L={wheels_velo[0]:.2f}, R={wheels_velo[1]:.2f}')
     
     setRobotMotion(sim, motors_handle, wheels_velo)
