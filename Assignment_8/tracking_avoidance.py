@@ -3,6 +3,8 @@ from coppeliasim_zmqremoteapi_client import RemoteAPIClient
 import time
 import numpy as np
 import matplotlib.pyplot as plt
+import csv
+from datetime import datetime
 
 R = 0.0975
 L = 0.381
@@ -89,102 +91,6 @@ def cmd_wcs2bcs(vd, theta):
     tf_mat_pinv = np.linalg.pinv(tf_mat)
     return np.dot(tf_mat_pinv, vd)
 
-# Add this class before your main loop
-class PositionTracker:
-    def __init__(self, max_points=100):
-        # Setup figure and plots
-        plt.ion()  # Turn on interactive mode
-        self.fig, self.ax = plt.subplots(figsize=(10, 8))
-        self.ax.set_xlim(-5, 5)
-        self.ax.set_ylim(-5, 5)
-        self.ax.set_xlabel('X (m)')
-        self.ax.set_ylabel('Y (m)')
-        self.ax.set_title('Robot and Target Tracking')
-        self.ax.grid(True)
-        
-        # Initialize data storage
-        self.max_points = max_points
-        self.robot_x = []
-        self.robot_y = []
-        self.target_x = [] 
-        self.target_y = []
-        
-        # Plot elements
-        self.robot_trail, = self.ax.plot([], [], 'b-', alpha=0.5, label='Robot Path')
-        self.target_trail, = self.ax.plot([], [], 'r-', alpha=0.5, label='Target Path')
-        self.robot_pos = self.ax.scatter([], [], color='blue', s=100, label='Robot')
-        self.target_pos = self.ax.scatter([], [], color='red', s=100, label='Target')
-        
-        # Robot and target orientation arrows
-        self.robot_arrow = self.ax.quiver([], [], [], [], color='blue', scale=20)
-        self.target_arrow = self.ax.quiver([], [], [], [], color='red', scale=20)
-        
-        # Error display text
-        self.error_text = self.ax.text(0.02, 0.95, '', transform=self.ax.transAxes)
-        
-        self.ax.legend()
-        plt.show(block=False)
-        self.fig.canvas.draw()
-    
-    def update(self, target_pose, robot_pose, ed, eyaw):
-        # Append new data (limited to max_points)
-        self.robot_x.append(robot_pose[0])
-        self.robot_y.append(robot_pose[1])
-        self.target_x.append(target_pose[0])
-        self.target_y.append(target_pose[1])
-        
-        # Trim lists to max_points
-        if len(self.robot_x) > self.max_points:
-            self.robot_x.pop(0)
-            self.robot_y.pop(0)
-            self.target_x.pop(0)
-            self.target_y.pop(0)
-        
-        # Update trails
-        self.robot_trail.set_data(self.robot_x, self.robot_y)
-        self.target_trail.set_data(self.target_x, self.target_y)
-        
-        # Update current positions
-        self.robot_pos.set_offsets(np.column_stack([robot_pose[0], robot_pose[1]]))
-        self.target_pos.set_offsets(np.column_stack([target_pose[0], target_pose[1]]))
-        
-        # Update direction arrows
-        robot_dx = 0.3 * np.cos(robot_pose[2])
-        robot_dy = 0.3 * np.sin(robot_pose[2])
-        self.robot_arrow.set_offsets(np.array([robot_pose[0], robot_pose[1]]))
-        self.robot_arrow.set_UVC(robot_dx, robot_dy)
-        
-        target_dx = 0.3 * np.cos(target_pose[2])
-        target_dy = 0.3 * np.sin(target_pose[2])
-        self.target_arrow.set_offsets(np.array([target_pose[0], target_pose[1]]))
-        self.target_arrow.set_UVC(target_dx, target_dy)
-        
-        # Update error text
-        self.error_text.set_text(f'Distance error: {ed/100:.2f} m\nYaw error: {eyaw:.2f} deg')
-        
-        # Auto-adjust plot limits if robot or target goes out of bounds
-        xmin, xmax = self.ax.get_xlim()
-        ymin, ymax = self.ax.get_ylim()
-        
-        need_resize = False
-        if robot_pose[0] < xmin or robot_pose[0] > xmax or target_pose[0] < xmin or target_pose[0] > xmax:
-            xmin = min(xmin, robot_pose[0] - 1, target_pose[0] - 1)
-            xmax = max(xmax, robot_pose[0] + 1, target_pose[0] + 1)
-            need_resize = True
-            
-        if robot_pose[1] < ymin or robot_pose[1] > ymax or target_pose[1] < ymin or target_pose[1] > ymax:
-            ymin = min(ymin, robot_pose[1] - 1, target_pose[1] - 1)
-            ymax = max(ymax, robot_pose[1] + 1, target_pose[1] + 1)
-            need_resize = True
-        
-        if need_resize:
-            self.ax.set_xlim(xmin, xmax)
-            self.ax.set_ylim(ymin, ymax)
-        
-        # Redraw plot
-        self.fig.canvas.draw_idle()
-        self.fig.canvas.flush_events()
-
 class FuzzyMembership:
     def __init__(self, labels, centers_or_abc):
         self.labels = labels
@@ -250,6 +156,8 @@ class TrackingFIS:
         deg_centers = np.linspace(-180, 180, 13)
         self.degree_mf = FuzzyMembership(deg_labels, deg_centers)
 
+        self.error_tolerance = 0.05
+        
         self.vx_rule_table = [
             #   Z      VCL      CL      M      F      VF     IN
             ['S',  'VSLBW', 'SLBW',  'BW',  'FSBW', 'VFSBW', 'TBW'],   # NIN
@@ -326,7 +234,15 @@ class TrackingFIS:
         
         theta = np.arctan2(ey, ex)
         yawd_des = theta - current_pose[2]
+        
+        if np.abs(ex) <= self.error_tolerance and np.abs(ey) <= self.error_tolerance:
+            yawd_des = eyaw
         yawd_des = max(-1, min(1, yawd_des))
+        
+        if np.abs(ex) <= self.error_tolerance and np.abs(ey) <= self.error_tolerance:
+            vx = 0
+        if np.abs(ey) <= self.error_tolerance and np.abs(ex) <= self.error_tolerance:
+            vy = 0
         
         cmd_wcs = np.array([vx, vy, yawd_des])
         self.vw_out = cmd_wcs2bcs(cmd_wcs, theta)
@@ -385,8 +301,6 @@ class ObstacleAvoidanceFIS:
             if output[0] >= self.near_threshold:
                 self.obstacle_nearby = 1
         
-        
-        
         for idx in range(3):
             left_idx = idx
             right_idx = len(output_singleton) - idx - 1
@@ -444,10 +358,15 @@ phi_normal = 3
 
 obstacle = ObstacleAvoidanceFIS()
 tracker = TrackingFIS()
-# Add this before your while loop
-# position_tracker = PositionTracker()
 
-# Inside your while loop, after calculating ed and eyaw
+csv_filename = f"robot_tracking_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+with open(csv_filename, 'w', newline='') as csvfile:
+    csv_writer = csv.writer(csvfile)
+    # Write header row
+    csv_writer.writerow(['timestamp', 'target_x', 'target_y', 'target_yaw', 
+                         'robot_x', 'robot_y', 'robot_yaw',
+                         'error_distance', 'error_yaw'])
+
 
 while True:
     current_time = time.time()
@@ -467,6 +386,16 @@ while True:
         eyaw -= 360
     elif eyaw < -180:
         eyaw += 360
+    
+    with open(csv_filename, 'a', newline='') as csvfile:
+        csv_writer = csv.writer(csvfile)
+        csv_writer.writerow([
+            current_time,
+            target_pose[0], target_pose[1], target_pose[2],
+            current_pose[0], current_pose[1], current_pose[2],
+            ed/100,  # Convert back to meters
+            eyaw
+        ])
     
     tracker_vw = tracker.update(np.array([ed, eyaw]))
     obs_vw = obstacle.update(obj_distance)
