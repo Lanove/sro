@@ -16,7 +16,7 @@ def triangle_membership(x, a, b, c, FD0, FD2):
 def ultrasound_membership(x):
     near = triangle_membership(x, 0.2, 0.2, 0.3, 1, 0)
     far = triangle_membership(x, 0.2, 0.3, 0.3, 0, 1)
-    y = np.array([near, far], dtype=float)
+    y = np.array([[near], [far]], dtype=float)
     return y
 
 def getSensorsHandle(sim):
@@ -46,50 +46,6 @@ def setRobotMotion(sim, motorsHandle, veloCmd):
     _ = sim.setJointTargetVelocity(motorsHandle[0], veloCmd[0])
     _ = sim.setJointTargetVelocity(motorsHandle[1], veloCmd[1])
 
-dis_eval = np.linspace(0, 1, 100)
-near_vals = []
-far_vals = []
-for dis in dis_eval:
-    membership = ultrasound_membership(dis)
-    near_vals.append(membership[0][0])
-    far_vals.append(membership[1][0])
-
-plt.ion()
-fig, ax = plt.subplots(figsize=(10, 6))
-plt.title('Distance Membership Functions')
-plt.xlabel('Distance (m)')
-plt.ylabel('Membership Value')
-plt.grid(True)
-plt.xlim([0, 1])
-plt.ylim([0, 1.1])
-
-ax.plot(dis_eval, near_vals, 'b-', label='Near')
-ax.plot(dis_eval, far_vals, 'g-', label='Far')
-ax.fill_between(dis_eval, near_vals, alpha=0.2, color='blue')
-ax.fill_between(dis_eval, far_vals, alpha=0.2, color='green')
-plt.legend()
-
-dot0_near, = ax.plot([], [], 'ro', markersize=8, label='S0')
-dot0_far, = ax.plot([], [], 'ro', markersize=8, fillstyle='none', label='S0')
-dot2_near, = ax.plot([], [], 'go', markersize=8, label='S2')
-dot2_far, = ax.plot([], [], 'go', markersize=8, fillstyle='none', label='S2')
-dot5_near, = ax.plot([], [], 'bo', markersize=8, label='S5')
-dot5_far, = ax.plot([], [], 'bo', markersize=8, fillstyle='none', label='S5')
-dot7_near, = ax.plot([], [], 'mo', markersize=8, label='S7')
-dot7_far, = ax.plot([], [], 'mo', markersize=8, fillstyle='none', label='S7')
-
-ax.legend(loc='upper right')
-
-text0 = ax.text(0.05, 0.95, '', transform=ax.transAxes)
-text2 = ax.text(0.05, 0.90, '', transform=ax.transAxes)
-text5 = ax.text(0.05, 0.85, '', transform=ax.transAxes)
-text7 = ax.text(0.05, 0.80, '', transform=ax.transAxes)
-text_wheels = ax.text(0.05, 0.75, '', transform=ax.transAxes)
-
-plt.draw()
-plt.pause(0.01)
-print("Program Started")
-
 client = RemoteAPIClient()
 sim = client.require("sim")
 sim.setStepping(False)
@@ -115,29 +71,6 @@ while True:
     d2_clip = min(d2, 1.0)
     d5_clip = min(d5, 1.0)
     d7_clip = min(d7, 1.0)
-    
-    s0_membership = ultrasound_membership(d0_clip)
-    s0_near, s0_far = s0_membership[0][0], s0_membership[1][0]
-    s2_membership = ultrasound_membership(d2_clip)
-    s2_near, s2_far = s2_membership[0][0], s2_membership[1][0]
-    s5_membership = ultrasound_membership(d5_clip)
-    s5_near, s5_far = s5_membership[0][0], s5_membership[1][0]
-    s7_membership = ultrasound_membership(d7_clip)
-    s7_near, s7_far = s7_membership[0][0], s7_membership[1][0]
-    
-    dot0_near.set_data([d0_clip], [s0_near])
-    dot0_far.set_data([d0_clip], [s0_far])
-    dot2_near.set_data([d2_clip], [s2_near])
-    dot2_far.set_data([d2_clip], [s2_far])
-    dot5_near.set_data([d5_clip], [s5_near])
-    dot5_far.set_data([d5_clip], [s5_far])
-    dot7_near.set_data([d7_clip], [s7_near])
-    dot7_far.set_data([d7_clip], [s7_far])
-    
-    text0.set_text(f'S0: {d0:.2f}m (N: {s0_near:.2f}, F: {s0_far:.2f})')
-    text2.set_text(f'S2: {d2:.2f}m (N: {s2_near:.2f}, F: {s2_far:.2f})')
-    text5.set_text(f'S5: {d5:.2f}m (N: {s5_near:.2f}, F: {s5_far:.2f})')
-    text7.set_text(f'S7: {d7:.2f}m (N: {s7_near:.2f}, F: {s7_far:.2f})')
     
     output_singleton = []
     crisp_out = []
